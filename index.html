@@ -134,6 +134,7 @@
       accent-color:var(--navy-1);
       flex:none;
     }
+    .region-group{flex-direction:column;gap:10px;}
     .error-text{
       color:var(--danger);
       font-size:12px;
@@ -309,10 +310,14 @@
 
       <div class="field" id="field-region">
         <label>所在區域<span class="required">*</span></label>
-        <select id="region">
-          <option value="">請選擇所在區域</option>
-        </select>
+        <div class="checkbox-group region-group" id="regionGroup"></div>
         <div class="error-text">請選擇所在區域</div>
+      </div>
+
+      <div class="field hidden" id="field-regionDetail">
+        <label>南部所在區域<span class="required">*</span><span class="hint">請填寫縣市與行政區，方便安排服務窗口</span></label>
+        <input type="text" id="regionDetail" maxlength="50" placeholder="例如：高雄市前鎮區">
+        <div class="error-text">請填寫所在縣市與行政區</div>
       </div>
 
       <div class="field" id="field-consent">
@@ -363,8 +368,10 @@
 
     // 以下題目與選項對照官網 https://hotlab.com.tw/ 「聯絡我們」問卷。
     // 官網日後更新題目/選項，要回來同步修改這裡（Code.gs 裡的 SERVICES / REGIONS 也要一起改）。
-    const SERVICES = ['農藥殘留檢驗', '食品與農產品檢驗', '寵物食品檢驗', '專案委託開發', '客製化檢驗', '環境檢測', 'GLP 農藥試驗', '其他'];
-    const REGIONS = ['北部', '中部', '南部'];
+    const SERVICES = ['食品檢驗', '化粧品檢驗', '寵物食品檢驗', '環境水質檢驗', '其他'];
+    // 所在區域：選「南部」時會多出第二層「南部所在區域」填空題（高雄分區較細）
+    const REGIONS = ['北部', '中部（台中、彰化、南投、雲林、嘉義）', '南部（台南、高雄、屏東）'];
+    const SOUTH = REGIONS[2];
     // 「客戶類型」是官網沒有的題目，沿用台美表單的做法：個人戶沒有公司名稱可填，選「個人戶」時自動隱藏公司名稱。
     const CUSTOMER_TYPES = ['公司戶', '個人戶'];
     // ============================================
@@ -410,7 +417,7 @@
       });
     }
 
-    fillSelect(document.getElementById('region'), REGIONS);
+    fillGroup(document.getElementById('regionGroup'), 'region', REGIONS, 'radio');
     fillGroup(document.getElementById('servicesGroup'), 'services', SERVICES, 'checkbox');
     fillGroup(document.getElementById('customerTypeGroup'), 'customerType', CUSTOMER_TYPES, 'radio');
 
@@ -446,6 +453,15 @@
     }
     document.getElementById('customerTypeGroup').addEventListener('change', updateCustomerTypeVisibility);
 
+    // 「所在區域」選南部才顯示第二層填空題
+    const regionDetailField = document.getElementById('field-regionDetail');
+    function updateRegionVisibility() {
+      const isSouth = getCheckedValue('region') === SOUTH;
+      regionDetailField.classList.toggle('hidden', !isSouth);
+      if (!isSouth) regionDetailField.classList.remove('invalid');
+    }
+    document.getElementById('regionGroup').addEventListener('change', updateRegionVisibility);
+
     // ---------- 帶入上次填過的資料（只帶身份資料，詢價內容每次都要重填） ----------
     function prefillFromPreviousAnswers(userId) {
       fetch(GAS_ENDPOINT + '?action=lookup&userId=' + encodeURIComponent(userId), { method: 'GET' })
@@ -457,7 +473,10 @@
           document.getElementById('contact').value = data.contact || '';
           document.getElementById('phone').value = data.phone || '';
           document.getElementById('email').value = data.email || '';
-          document.getElementById('region').value = data.region || '';
+          // 區域選項文字裡有「、」，不能用 setCheckedValues 拆字串，直接比對整段
+          document.querySelectorAll('input[name="region"]').forEach((el) => { el.checked = el.value === data.region; });
+          document.getElementById('regionDetail').value = data.regionDetail || '';
+          updateRegionVisibility();
           updateCustomerTypeVisibility();
         })
         .catch((err) => {
@@ -510,7 +529,8 @@
       const contact = document.getElementById('contact').value.trim();
       const phone = document.getElementById('phone').value.trim();
       const email = document.getElementById('email').value.trim();
-      const region = document.getElementById('region').value;
+      const region = getCheckedValue('region');
+      const regionDetail = document.getElementById('regionDetail').value.trim();
       const consent = document.getElementById('consent').checked;
 
       const checks = {
@@ -522,6 +542,7 @@
         phone: /^[0-9+#\-\s()]{8,20}$/.test(phone),
         email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
         region: region !== '',
+        regionDetail: region !== SOUTH || regionDetail.length > 0,
         consent: consent,
       };
       Object.keys(checks).forEach((k) => setFieldError(k, !checks[k]));
@@ -555,7 +576,8 @@
         contact: document.getElementById('contact').value.trim(),
         phone: document.getElementById('phone').value.trim(),
         email: document.getElementById('email').value.trim(),
-        region: document.getElementById('region').value,
+        region: getCheckedValue('region'),
+        regionDetail: getCheckedValue('region') === SOUTH ? document.getElementById('regionDetail').value.trim() : '',
         consent: true,
         // 來源追蹤：連結加上 ?src=richmenu / ?src=website 等
         source: new URLSearchParams(location.search).get('src') || '',
