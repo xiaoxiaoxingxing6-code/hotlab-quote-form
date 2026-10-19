@@ -134,7 +134,6 @@
       accent-color:var(--navy-1);
       flex:none;
     }
-    .region-group{flex-direction:column;gap:10px;}
     .error-text{
       color:var(--danger);
       font-size:12px;
@@ -308,16 +307,20 @@
         <div class="error-text">請填寫正確的 Email</div>
       </div>
 
-      <div class="field" id="field-region">
-        <label>所在區域<span class="required">*</span></label>
-        <div class="checkbox-group region-group" id="regionGroup"></div>
-        <div class="error-text">請選擇所在區域</div>
+      <div class="field" id="field-city">
+        <label>所在縣市<span class="required">*</span></label>
+        <select id="city">
+          <option value="">請選擇縣市</option>
+        </select>
+        <div class="error-text">請選擇所在縣市</div>
       </div>
 
-      <div class="field hidden" id="field-regionDetail">
-        <label>南部所在區域<span class="required">*</span><span class="hint">請填寫縣市與行政區，方便安排服務窗口</span></label>
-        <input type="text" id="regionDetail" maxlength="50" placeholder="例如：高雄市前鎮區">
-        <div class="error-text">請填寫所在縣市與行政區</div>
+      <div class="field hidden" id="field-district">
+        <label>高雄市行政區<span class="required">*</span></label>
+        <select id="district">
+          <option value="">請選擇行政區</option>
+        </select>
+        <div class="error-text">請選擇行政區</div>
       </div>
 
       <div class="field" id="field-consent">
@@ -367,11 +370,19 @@
     const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzniTRW96JLt9KT3w2ENQ1UpJqXGHtZrYzeFM5AAeGIeAci0OMpystvPFCeVDuMWhac/exec';
 
     // 以下題目與選項對照官網 https://hotlab.com.tw/ 「聯絡我們」問卷。
-    // 官網日後更新題目/選項，要回來同步修改這裡（Code.gs 裡的 SERVICES / REGIONS 也要一起改）。
+    // 官網日後更新題目/選項，要回來同步修改這裡（Code.gs 裡的 SERVICES / CITIES 也要一起改）。
     const SERVICES = ['食品檢驗', '化粧品檢驗', '寵物食品檢驗', '環境水質檢驗', '其他'];
-    // 所在區域：選「南部」時會多出第二層「南部所在區域」填空題（高雄分區較細）
-    const REGIONS = ['北部', '中部（台中、彰化、南投、雲林、嘉義）', '南部（台南、高雄、屏東）'];
-    const SOUTH = REGIONS[2];
+    // 所在縣市：客人只要選自己的縣市，負責業務由後台 Code.gs 自動判斷。選「高雄市」時要再選行政區。
+    const CITY_GROUPS = [
+      ['北部', ['台北市', '新北市', '基隆市', '桃園市', '新竹市', '新竹縣', '宜蘭縣']],
+      ['中部', ['苗栗縣', '台中市', '彰化縣', '南投縣', '雲林縣']],
+      ['南部', ['嘉義市', '嘉義縣', '台南市', '高雄市', '屏東縣']],
+      // 花東及離島不在服務範圍，不列入
+    ];
+    const KAOHSIUNG = '高雄市';
+    const KAOHSIUNG_DISTRICTS = ['鹽埕區', '鼓山區', '左營區', '楠梓區', '三民區', '新興區', '前金區', '苓雅區', '前鎮區', '旗津區', '小港區',
+      '鳳山區', '林園區', '大寮區', '大樹區', '大社區', '仁武區', '鳥松區', '岡山區', '橋頭區', '燕巢區', '田寮區', '阿蓮區', '路竹區',
+      '湖內區', '茄萣區', '永安區', '彌陀區', '梓官區', '旗山區', '美濃區', '六龜區', '甲仙區', '杉林區', '內門區', '茂林區', '桃源區', '那瑪夏區'];
     // 「客戶類型」是官網沒有的題目，沿用台美表單的做法：個人戶沒有公司名稱可填，選「個人戶」時自動隱藏公司名稱。
     const CUSTOMER_TYPES = ['公司戶', '個人戶'];
     // ============================================
@@ -417,7 +428,17 @@
       });
     }
 
-    fillGroup(document.getElementById('regionGroup'), 'region', REGIONS, 'radio');
+    // 縣市下拉選單依北／中／南分組，方便客人快速找到
+    (function () {
+      const sel = document.getElementById('city');
+      CITY_GROUPS.forEach(([groupName, cities]) => {
+        const og = document.createElement('optgroup');
+        og.label = groupName;
+        cities.forEach((c) => { const o = document.createElement('option'); o.value = c; o.textContent = c; og.appendChild(o); });
+        sel.appendChild(og);
+      });
+    })();
+    fillSelect(document.getElementById('district'), KAOHSIUNG_DISTRICTS);
     fillGroup(document.getElementById('servicesGroup'), 'services', SERVICES, 'checkbox');
     fillGroup(document.getElementById('customerTypeGroup'), 'customerType', CUSTOMER_TYPES, 'radio');
 
@@ -453,14 +474,14 @@
     }
     document.getElementById('customerTypeGroup').addEventListener('change', updateCustomerTypeVisibility);
 
-    // 「所在區域」選南部才顯示第二層填空題
-    const regionDetailField = document.getElementById('field-regionDetail');
-    function updateRegionVisibility() {
-      const isSouth = getCheckedValue('region') === SOUTH;
-      regionDetailField.classList.toggle('hidden', !isSouth);
-      if (!isSouth) regionDetailField.classList.remove('invalid');
+    // 選「高雄市」才顯示行政區
+    const districtField = document.getElementById('field-district');
+    function updateCityVisibility() {
+      const isKaohsiung = document.getElementById('city').value === KAOHSIUNG;
+      districtField.classList.toggle('hidden', !isKaohsiung);
+      if (!isKaohsiung) districtField.classList.remove('invalid');
     }
-    document.getElementById('regionGroup').addEventListener('change', updateRegionVisibility);
+    document.getElementById('city').addEventListener('change', updateCityVisibility);
 
     // ---------- 帶入上次填過的資料（只帶身份資料，詢價內容每次都要重填） ----------
     function prefillFromPreviousAnswers(userId) {
@@ -473,10 +494,9 @@
           document.getElementById('contact').value = data.contact || '';
           document.getElementById('phone').value = data.phone || '';
           document.getElementById('email').value = data.email || '';
-          // 區域選項文字裡有「、」，不能用 setCheckedValues 拆字串，直接比對整段
-          document.querySelectorAll('input[name="region"]').forEach((el) => { el.checked = el.value === data.region; });
-          document.getElementById('regionDetail').value = data.regionDetail || '';
-          updateRegionVisibility();
+          document.getElementById('city').value = data.city || '';
+          document.getElementById('district').value = data.district || '';
+          updateCityVisibility();
           updateCustomerTypeVisibility();
         })
         .catch((err) => {
@@ -529,8 +549,8 @@
       const contact = document.getElementById('contact').value.trim();
       const phone = document.getElementById('phone').value.trim();
       const email = document.getElementById('email').value.trim();
-      const region = getCheckedValue('region');
-      const regionDetail = document.getElementById('regionDetail').value.trim();
+      const city = document.getElementById('city').value;
+      const district = document.getElementById('district').value;
       const consent = document.getElementById('consent').checked;
 
       const checks = {
@@ -541,8 +561,8 @@
         contact: contact.length > 0,
         phone: /^[0-9+#\-\s()]{8,20}$/.test(phone),
         email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
-        region: region !== '',
-        regionDetail: region !== SOUTH || regionDetail.length > 0,
+        city: city !== '',
+        district: city !== KAOHSIUNG || district !== '',
         consent: consent,
       };
       Object.keys(checks).forEach((k) => setFieldError(k, !checks[k]));
@@ -576,8 +596,8 @@
         contact: document.getElementById('contact').value.trim(),
         phone: document.getElementById('phone').value.trim(),
         email: document.getElementById('email').value.trim(),
-        region: getCheckedValue('region'),
-        regionDetail: getCheckedValue('region') === SOUTH ? document.getElementById('regionDetail').value.trim() : '',
+        city: document.getElementById('city').value,
+        district: document.getElementById('city').value === KAOHSIUNG ? document.getElementById('district').value : '',
         consent: true,
         // 來源追蹤：連結加上 ?src=richmenu / ?src=website 等
         source: new URLSearchParams(location.search).get('src') || '',
