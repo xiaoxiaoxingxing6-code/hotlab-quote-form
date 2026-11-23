@@ -372,6 +372,8 @@
     // 以下題目與選項對照官網 https://hotlab.com.tw/ 「聯絡我們」問卷。
     // 官網日後更新題目/選項，要回來同步修改這裡（Code.gs 裡的 SERVICES / CITIES 也要一起改）。
     const SERVICES = ['農藥殘留檢驗', '食品與農產品檢驗', '寵物食品檢驗', '專案委託開發', '客製化檢驗', '環境檢測', 'GLP 農藥試驗', '其他'];
+    // 連結加上 ?service=pesticide（或中文服務名稱）時自動勾選該服務，多項用逗號分隔，例如 ?service=pesticide,pet
+    const SERVICE_ALIASES = { pesticide: '農藥殘留檢驗', food: '食品與農產品檢驗', pet: '寵物食品檢驗', project: '專案委託開發', custom: '客製化檢驗', env: '環境檢測', glp: 'GLP 農藥試驗', other: '其他' };
     // 所在縣市：客人只要選自己的縣市，負責業務由後台 Code.gs 自動判斷。選「高雄市」時要再選行政區。
     const CITY_GROUPS = [
       ['北部', ['台北市', '新北市', '基隆市', '桃園市', '新竹市', '新竹縣', '宜蘭縣']],
@@ -456,6 +458,19 @@
       });
     }
 
+    // 依網址的 ?service= 預先勾選詢問服務（客人仍可自行增減）
+    function applyServiceFromUrl() {
+      const raw = new URLSearchParams(location.search).get('service');
+      if (!raw) return;
+      raw.split(/[,、]/).map((s) => s.trim()).filter(Boolean).forEach((key) => {
+        const name = SERVICE_ALIASES[key.toLowerCase()] || key;
+        document.querySelectorAll('input[name="services"]').forEach((el) => {
+          if (el.value === name) el.checked = true;
+        });
+      });
+    }
+    applyServiceFromUrl();
+
     document.getElementById('togglePrivacy').addEventListener('click', function (e) {
       e.preventDefault();
       document.getElementById('privacy').classList.toggle('open');
@@ -513,6 +528,7 @@
             liff.login();
             return;
           }
+          applyServiceFromUrl(); // LIFF 轉址後網址參數才會完整，再套用一次
           return liff.getProfile();
         })
         .then((profile) => {
@@ -615,7 +631,7 @@
       document.getElementById('resultIcon').textContent = success ? '✓' : '!';
       document.getElementById('resultTitle').textContent = success ? '已送出，謝謝！' : '送出失敗';
       document.getElementById('resultMessage').textContent = success
-        ? '我們已收到您的詢價資訊，專人將於 1-2 個工作天內與您聯繫。'
+        ? '我們已收到您的詢價資訊，專人將於 1-2 個工作天內與您聯繫。如需補充產品規格或既有檢驗報告，可直接在 LINE 聊天室傳給我們。'
         : (message || '請稍後再試一次，或直接透過聊天室與我們聯繫。');
       document.getElementById('retryBtn').style.display = success ? 'none' : 'inline-block';
       screen.className = success ? 'show success' : 'show fail';
